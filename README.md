@@ -42,6 +42,7 @@ widgets:
 
 - **Notes**: a scratchpad that is always one hover away. Word count, copy, clear.
 - **Tasks**: a quick to-do list. Type, press return, check things off, clear done.
+  Drag a task to reorder it.
   The number of open tasks shows next to the camera while the deck is closed.
 - **Pomodoro**: focus / short break / long break cycle with a progress ring,
   session dots, pause, reset and skip. The countdown shows beside the camera

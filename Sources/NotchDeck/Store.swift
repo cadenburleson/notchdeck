@@ -79,6 +79,16 @@ final class AppStore: ObservableObject {
     func clearCompletedTasks() {
         tasks.removeAll { $0.isDone }
     }
+
+    /// Moves a task so it ends up at `destination` (its index after the move).
+    /// Out-of-range destinations are clamped; unknown ids are ignored.
+    func moveTask(_ id: TodoItem.ID, to destination: Int) {
+        guard let from = tasks.firstIndex(where: { $0.id == id }), !tasks.isEmpty else { return }
+        let to = min(max(destination, 0), tasks.count - 1)
+        guard from != to else { return }
+        let item = tasks.remove(at: from)
+        tasks.insert(item, at: to)
+    }
 }
 
 extension JSONEncoder {

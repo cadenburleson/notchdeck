@@ -32,6 +32,10 @@ final class NotchWindowController {
     private var cancellables = Set<AnyCancellable>()
     private var mouseMonitors: [Any] = []
     private var mouseInside = false
+    /// A left-button press that began on the panel (a drag, a text selection...).
+    /// Hover state is frozen until it ends so the panel can't collapse or turn
+    /// click-through mid-gesture when the pointer strays outside the shape.
+    private var pressBeganInside = false
 
     private(set) var isVisible = false
 
@@ -89,6 +93,23 @@ final class NotchWindowController {
         let handler: (NSEvent) -> Void = { [weak self] _ in self?.mouseDidMove() }
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: handler) {
             mouseMonitors.append(global)
+        }
+        if let down = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown], handler: { [weak self] e in
+            if let self, self.shapeFrame.contains(NSEvent.mouseLocation) { self.pressBeganInside = true }
+            return e
+        }) {
+            mouseMonitors.append(down)
+        }
+        let released: (NSEvent) -> Void = { [weak self] _ in
+            guard let self, self.pressBeganInside else { return }
+            self.pressBeganInside = false
+            DispatchQueue.main.async { self.mouseDidMove() }
+        }
+        if let upLocal = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp], handler: { e in released(e); return e }) {
+            mouseMonitors.append(upLocal)
+        }
+        if let upGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp], handler: released) {
+            mouseMonitors.append(upGlobal)
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { e in handler(e); return e }) {
             mouseMonitors.append(local)
@@ -174,7 +195,7 @@ final class NotchWindowController {
     // MARK: - Hover handling
 
     private func mouseDidMove() {
-        guard isVisible else { return }
+        guard isVisible, !pressBeganInside else { return }
         let inside = shapeFrame.contains(NSEvent.mouseLocation)
         guard inside != mouseInside else { return }
         mouseInside = inside
