@@ -44,9 +44,14 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
           security import $RUNNER_TEMP/cert.p12 -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          # Apple's Developer ID intermediate, so the signing chain validates on the runner.
+          curl -sL -o $RUNNER_TEMP/DeveloperIDG2CA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          security import $RUNNER_TEMP/DeveloperIDG2CA.cer -k "$KEYCHAIN" -T /usr/bin/codesign || true
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          security find-identity -v -p codesigning "$KEYCHAIN"
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          test -n "$IDENTITY" || { echo "No Developer ID Application identity found in the imported .p12"; exit 1; }
           echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
 
       - name: Build app
@@ -65,8 +70,14 @@ jobs:
           echo "$NOTARY_KEY_P8" > $RUNNER_TEMP/notary.p8
           ditto -c -k --keepParent .build/NotchDeck.app $RUNNER_TEMP/notarize.zip
           xcrun notarytool submit $RUNNER_TEMP/notarize.zip --key $RUNNER_TEMP/notary.p8 \
-            --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait
+            --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --output-format json | tee $RUNNER_TEMP/notary.json
+          grep -q '"status": *"Accepted"' $RUNNER_TEMP/notary.json || {
+            ID=$(grep -o '"id": *"[^"]*"' $RUNNER_TEMP/notary.json | head -1 | cut -d'"' -f4)
+            xcrun notarytool log "$ID" --key $RUNNER_TEMP/notary.p8 --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID"
+            exit 1
+          }
           xcrun stapler staple .build/NotchDeck.app
+          spctl --assess --type execute --verbose=2 .build/NotchDeck.app
 
       - name: Package
         run: |
