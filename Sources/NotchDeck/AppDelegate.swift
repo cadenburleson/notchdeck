@@ -1,19 +1,27 @@
 import AppKit
 import ServiceManagement
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: AppStore!
     private var pomodoro: PomodoroEngine!
     private var notchController: NotchWindowController!
     private var statusItem: NSStatusItem!
+    private var updater: UpdateService!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         store = AppStore.load()
         pomodoro = PomodoroEngine(settings: { [weak store] in store?.settings.pomodoro ?? PomodoroSettings() })
         notchController = NotchWindowController(store: store, pomodoro: pomodoro)
         notchController.show()
+        updater = UpdateService()
         setupStatusItem()
         NotificationService.shared.requestAuthorizationIfPossible()
+
+        // `NotchDeck --check-updates` forces an update check (handy for testing the feed).
+        if CommandLine.arguments.contains("--check-updates") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.updater.checkForUpdates() }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -79,6 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         about.target = self
         menu.addItem(about)
 
+        let update = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        update.target = self
+        update.isEnabled = updater.canCheckForUpdates
+        menu.addItem(update)
+
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit NotchDeck", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
@@ -104,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleLaunchAtLogin() {
         LaunchAtLogin.isEnabled.toggle()
+    }
+
+    @objc private func checkForUpdates() {
+        updater.checkForUpdates()
     }
 
     @objc private func showAbout() {

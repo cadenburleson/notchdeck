@@ -67,7 +67,10 @@ Not every Mac has a notch, and not everyone wants the deck at the top. In
 - Never steals focus from the app you are working in. Keyboard focus returns
   to your previous app as soon as the deck closes.
 - Works across Spaces and over full-screen apps.
-- Single small binary, no dependencies.
+- Automatic updates via [Sparkle](https://sparkle-project.org): checks once a
+  day and offers new releases in place. "Check for Updates…" lives in the menu
+  bar item.
+- Single small binary; Sparkle is the only dependency.
 
 ## Install
 
@@ -94,8 +97,38 @@ make test       # unit tests
 
 There is no Xcode project to maintain: it is a plain Swift package and the
 `Makefile` wraps the binary into an `.app` bundle with the `Info.plist` in
-`Resources/`. `swift run` also works but user notifications and launch-at-login
-need a real bundle, so prefer `make run`.
+`Resources/` and copies `Sparkle.framework` into `Contents/Frameworks`.
+`swift run` also works but notifications, launch-at-login and updates need a
+real bundle, so prefer `make run`.
+
+## Releases and auto-updates
+
+Push a tag like `v0.3.0` and CI does the rest:
+
+1. Builds and signs the app (ad-hoc by default, Developer ID if the secrets
+   below exist), zips it and uploads it as a workflow artifact.
+2. Runs Sparkle's `generate_appcast` with the `SPARKLE_PRIVATE_KEY` secret to
+   EdDSA-sign the zip and write `appcast.xml`.
+3. Publishes a GitHub release with `NotchDeck.zip` and `appcast.xml` attached.
+
+Installed apps read the feed from
+`https://github.com/cadenburleson/notchdeck/releases/latest/download/appcast.xml`,
+which GitHub redirects to the newest release, so nothing else needs hosting.
+The matching public key is `SUPublicEDKey` in `Resources/Info.plist`; Sparkle
+refuses any update that is not signed by the private key.
+
+Optional Developer ID signing and notarization is enabled by adding these
+repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_CERT_P12` | base64 of the exported "Developer ID Application" `.p12` |
+| `MACOS_CERT_PASSWORD` | password for that `.p12` |
+| `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`, `NOTARY_KEY_P8` | App Store Connect API key id, issuer id and the `.p8` contents |
+
+Locally, `make app SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"`
+does the same signing. To sign a release by hand instead of in CI, use
+`sign_update` from the Sparkle distribution with the same private key.
 
 ## How it works
 
@@ -115,6 +148,8 @@ need a real bundle, so prefer `make run`.
   accurate if timers are throttled; the cycle logic is covered by unit tests.
 - `AppStore` is a single `ObservableObject` persisted as JSON with debounced
   saves and tolerant decoding, so old state files keep loading as fields are added.
+- `UpdateService` wraps `SPUStandardUpdaterController`. Launching the binary
+  with `--check-updates` forces a check, which is handy for testing a feed.
 
 ## Roadmap / ideas
 

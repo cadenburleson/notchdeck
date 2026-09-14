@@ -9,27 +9,94 @@ on:
 permissions:
   contents: write
 
+env:
+  SPARKLE_VERSION: 2.10.0
+
 jobs:
   build:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app || true
+
       - name: Test
         run: make test
+
+      # Optional Developer ID signing. Add these repository secrets to enable it:
+      #   MACOS_CERT_P12        base64 of the exported "Developer ID Application" .p12
+      #   MACOS_CERT_PASSWORD   password of that .p12
+      #   NOTARY_KEY_ID / NOTARY_ISSUER_ID / NOTARY_KEY_P8   App Store Connect API key (p8 contents)
+      - name: Import signing certificate
+        id: cert
+        if: startsWith(github.ref, 'refs/tags/v') && env.MACOS_CERT_P12 != ''
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PW=$(uuidgen)
+          echo "$MACOS_CERT_P12" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security import $RUNNER_TEMP/cert.p12 -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
       - name: Build app
-        run: make app
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then VERSION="0.0.0-$(git rev-parse --short HEAD)"; fi
+          make app VERSION="$VERSION" SIGN_IDENTITY="${{ steps.cert.outputs.identity || '-' }}"
+
+      - name: Notarize
+        if: steps.cert.outputs.identity != ''
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          echo "$NOTARY_KEY_P8" > $RUNNER_TEMP/notary.p8
+          ditto -c -k --keepParent .build/NotchDeck.app $RUNNER_TEMP/notarize.zip
+          xcrun notarytool submit $RUNNER_TEMP/notarize.zip --key $RUNNER_TEMP/notary.p8 \
+            --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait
+          xcrun stapler staple .build/NotchDeck.app
+
       - name: Package
         run: |
-          cd .build && zip -r -y NotchDeck.zip NotchDeck.app
+          mkdir -p dist
+          ditto -c -k --keepParent .build/NotchDeck.app dist/NotchDeck.zip
+
       - uses: actions/upload-artifact@v4
         with:
           name: NotchDeck
-          path: .build/NotchDeck.zip
+          path: dist/NotchDeck.zip
+
+      - name: Generate signed appcast
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          curl -sL -o $RUNNER_TEMP/sparkle.tar.xz \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          mkdir -p $RUNNER_TEMP/sparkle && tar -xf $RUNNER_TEMP/sparkle.tar.xz -C $RUNNER_TEMP/sparkle
+          echo "$SPARKLE_PRIVATE_KEY" | $RUNNER_TEMP/sparkle/bin/generate_appcast --ed-key-file - \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}/releases" \
+            -o dist/appcast.xml dist
+          cat dist/appcast.xml
+
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: .build/NotchDeck.zip
+          files: |
+            dist/NotchDeck.zip
+            dist/appcast.xml
           generate_release_notes: true

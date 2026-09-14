@@ -32,5 +32,9 @@ Xcode (File > Open) and it will pick up `Package.swift`.
 
 ## Releasing
 
-Push a tag like `v0.2.0`. CI builds the app, zips it and attaches it to a
-GitHub release.
+Push a tag like `v0.2.0`. CI builds the app, zips it, generates a signed
+Sparkle appcast and attaches both to a GitHub release. Installed copies pick
+the update up within a day, or immediately via "Check for Updates…".
+
+Versions must increase monotonically (Sparkle compares `CFBundleVersion`,
+which the Makefile sets from the tag).
