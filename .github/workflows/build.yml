@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app || true
+      - name: Test
+        run: make test
+      - name: Build app
+        run: make app
+      - name: Package
+        run: |
+          cd .build && zip -r -y NotchDeck.zip NotchDeck.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NotchDeck
+          path: .build/NotchDeck.zip
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .build/NotchDeck.zip
+          generate_release_notes: true
