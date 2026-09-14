@@ -63,6 +63,7 @@ Not every Mac has a notch, and not everyone wants the deck at the top. In
 ### Other niceties
 
 - Hover to open, move away to close. Click the pin to keep it open while you type.
+- Open and close speed are adjustable in Settings, with a reset to defaults.
 - Menu bar item with quick "Open Notes / Tasks / Pomodoro", placement, launch at login and quit.
 - Never steals focus from the app you are working in. Keyboard focus returns
   to your previous app as soon as the deck closes.
@@ -76,7 +77,8 @@ Not every Mac has a notch, and not everyone wants the deck at the top. In
 
 **Download**: grab `NotchDeck.zip` from the
 [latest release](https://github.com/cadenburleson/notchdeck/releases/latest),
-unzip, and drag `NotchDeck.app` into `/Applications`.
+unzip, and drag `NotchDeck.app` into `/Applications`. The build is universal
+(Apple silicon and Intel) and needs macOS 14 or later.
 
 The build is ad-hoc signed and not notarized, so the first launch needs one of:
 
@@ -155,6 +157,11 @@ does the same signing. To sign a release by hand instead of in CI, use
   saves and tolerant decoding, so old state files keep loading as fields are added.
 - `UpdateService` wraps `SPUStandardUpdaterController`. Launching the binary
   with `--check-updates` forces a check, which is handy for testing a feed.
+- Open/close is sequenced by `NotchWindowController`: content fades out before
+  the shape shrinks and fades in after it has grown, because SwiftUI's clip and
+  mask modifiers snap to their final size rather than animating with the fill.
+  The window resize that follows a collapse is laid out synchronously, off any
+  animation transaction, so the shape never jumps.
 
 ## Roadmap / ideas
 

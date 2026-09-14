@@ -3,7 +3,11 @@ BUNDLE_ID  := com.cadenburleson.notchdeck
 BUILD_DIR  := .build
 CONFIG     ?= release
 APP_DIR    := $(BUILD_DIR)/$(APP_NAME).app
-BIN        := $(BUILD_DIR)/$(CONFIG)/$(APP_NAME)
+# Universal (Apple silicon + Intel) by default; ARCHS= for a native-only dev build.
+ARCHS      ?= arm64 x86_64
+ARCH_FLAGS := $(foreach a,$(ARCHS),--arch $(a))
+# SwiftPM puts multi-arch products under .build/apple/Products.
+BIN        := $(if $(word 2,$(ARCHS)),$(BUILD_DIR)/apple/Products/$(shell echo $(CONFIG) | awk '{print toupper(substr($$0,1,1)) substr($$0,2)}')/$(APP_NAME),$(BUILD_DIR)/$(CONFIG)/$(APP_NAME))
 VERSION    ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.1.0)
 # Sparkle ships as an xcframework inside the SwiftPM artifacts directory.
 SPARKLE_FW  = $(shell find $(BUILD_DIR)/artifacts -type d -name Sparkle.framework -path '*macos*' 2>/dev/null | head -1)
@@ -15,7 +19,7 @@ SIGN_IDENTITY ?= -
 all: app
 
 build:
-	swift build -c $(CONFIG)
+	swift build -c $(CONFIG) $(ARCH_FLAGS)
 
 test:
 	swift test

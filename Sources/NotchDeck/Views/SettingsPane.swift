@@ -6,6 +6,14 @@ struct SettingsPane: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
+        ScrollView(.vertical) {
+            columns
+        }
+        .scrollIndicators(.never)
+        .onChange(of: store.settings.pomodoro) { _, _ in pomodoro.settingsDidChange() }
+    }
+
+    private var columns: some View {
         HStack(alignment: .top, spacing: 20) {
             section("Pomodoro") {
                 durationRow("Focus", value: $store.settings.pomodoro.focusMinutes, range: 1...120)
@@ -43,14 +51,61 @@ struct SettingsPane: View {
                 toggleRow("Launch at login", isOn: $launchAtLogin)
                     .disabled(!LaunchAtLogin.isAvailable)
                     .onChange(of: launchAtLogin) { _, v in LaunchAtLogin.isEnabled = v }
-                Spacer()
+
+                animationSection
+                    .padding(.top, 6)
+
                 Text("Data lives in ~/Library/Application Support/NotchDeck")
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
             }
         }
-        .onChange(of: store.settings.pomodoro) { _, _ in pomodoro.settingsDidChange() }
+    }
+
+    private var isDefaultAnimation: Bool {
+        store.settings.openDuration == AppSettings.defaultOpenDuration
+            && store.settings.closeDuration == AppSettings.defaultCloseDuration
+    }
+
+    private var animationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("ANIMATION")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(Theme.tertiaryText)
+                Spacer()
+                Button("Reset to default") {
+                    store.settings.openDuration = AppSettings.defaultOpenDuration
+                    store.settings.closeDuration = AppSettings.defaultCloseDuration
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(isDefaultAnimation ? Theme.tertiaryText : Theme.accent(for: .pomodoro))
+                .disabled(isDefaultAnimation)
+            }
+            durationSlider("Open", value: $store.settings.openDuration)
+            durationSlider("Close", value: $store.settings.closeDuration)
+        }
+    }
+
+    private func durationSlider(_ label: String, value: Binding<Double>) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.text)
+                .frame(width: 40, alignment: .leading)
+            Slider(value: value, in: AppSettings.durationRange, step: 0.01)
+                .controlSize(.mini)
+                .tint(Theme.accent(for: .pomodoro))
+            Text(String(format: "%.2f s", value.wrappedValue))
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Theme.secondaryText)
+                .frame(width: 44, alignment: .trailing)
+        }
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

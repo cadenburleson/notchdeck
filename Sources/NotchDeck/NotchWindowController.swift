@@ -28,6 +28,7 @@ final class NotchWindowController {
     private var panel: NotchPanel!
     private var hostingView: NotchHostingView<AnyView>!
     private var collapseWorkItem: DispatchWorkItem?
+    private var phaseWork: [DispatchWorkItem] = []
     private var cancellables = Set<AnyCancellable>()
     private var mouseMonitors: [Any] = []
     private var mouseInside = false
@@ -198,33 +199,93 @@ final class NotchWindowController {
 
     private func expand() {
         collapseWorkItem?.cancel()
-        guard !viewModel.isExpanded else { return }
+        cancelPhases()
+        if viewModel.isExpanded {
+            // Re-entered during a collapse's fade-out: just bring the content back.
+            withAnimation(.easeOut(duration: 0.15)) { viewModel.showExpandedContent = true }
+            return
+        }
         panel.setFrame(viewModel.geometry.windowFrame(for: viewModel.expandedSize), display: true)
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+        hostingView.layoutSubtreeIfNeeded()
+        withoutAnimation { viewModel.showCollapsedContent = false }
+        let open = store.settings.openDuration
+        withAnimation(.spring(response: open, dampingFraction: 0.86)) {
             viewModel.isExpanded = true
+        }
+        // Content fades in once the shape has grown; clip/mask modifiers snap to
+        // the final size instead of animating, so earlier would leak outside.
+        after(open * 0.94) { [weak self] in
+            withAnimation(.easeOut(duration: min(0.15, open / 2))) { self?.viewModel.showExpandedContent = true }
         }
     }
 
     private func collapse(force: Bool = false) {
         collapseWorkItem?.cancel()
+        cancelPhases()
         guard viewModel.isExpanded || force else { return }
         if force { viewModel.isPinned = false }
         viewModel.showingSettings = false
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-            viewModel.isExpanded = false
-        }
+
         // Give keyboard focus back to whatever app the user was using.
         if panel.isKeyWindow {
             panel.makeFirstResponder(nil)
             panel.orderOut(nil)
             if isVisible || !force { panel.orderFrontRegardless() }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self] in
-            guard let self, !self.viewModel.isExpanded else { return }
-            self.panel.setFrame(self.viewModel.geometry.windowFrame(for: self.viewModel.collapsedSize), display: true)
-            self.mouseInside = self.shapeFrame.contains(NSEvent.mouseLocation)
-            self.panel.ignoresMouseEvents = !self.mouseInside
+
+        let close = store.settings.closeDuration
+        let fadeOut = min(0.1, close / 3)
+        let shrink: () -> Void = { [weak self] in
+            guard let self else { return }
+            withAnimation(.spring(response: close, dampingFraction: 0.9)) {
+                self.viewModel.isExpanded = false
+            }
+            self.after(close) { [weak self] in
+                guard let self, !self.viewModel.isExpanded else { return }
+                // Resize the window (margin only; the shape stays put on screen) and
+                // lay out synchronously. The fade below starts on the next tick so
+                // SwiftUI does not fold the resize into that animation.
+                self.panel.setFrame(self.viewModel.geometry.windowFrame(for: self.viewModel.collapsedSize), display: true)
+                self.hostingView.layoutSubtreeIfNeeded()
+                self.mouseInside = self.shapeFrame.contains(NSEvent.mouseLocation)
+                self.panel.ignoresMouseEvents = !self.mouseInside
+                self.after(0.02) { [weak self] in
+                    withAnimation(.easeIn(duration: 0.15)) { self?.viewModel.showCollapsedContent = true }
+                }
+            }
         }
+
+        if force {
+            withoutAnimation {
+                viewModel.showExpandedContent = false
+                viewModel.isExpanded = false
+                viewModel.showCollapsedContent = true
+            }
+            panel.setFrame(viewModel.geometry.windowFrame(for: viewModel.collapsedSize), display: true)
+        } else {
+            // Phase 1: fade the content out. Phase 2: shrink the shape.
+            withAnimation(.easeOut(duration: fadeOut)) { viewModel.showExpandedContent = false }
+            after(fadeOut, shrink)
+        }
+    }
+
+    // MARK: - Animation phases
+
+    private func after(_ delay: TimeInterval, _ block: @escaping () -> Void) {
+        let work = DispatchWorkItem(block: block)
+        phaseWork.append(work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func cancelPhases() {
+        phaseWork.forEach { $0.cancel() }
+        phaseWork.removeAll()
+    }
+
+    private func withoutAnimation(_ body: () -> Void) {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t, body)
     }
 
     // MARK: - Layout
@@ -236,7 +297,11 @@ final class NotchWindowController {
         viewModel.geometry = geometry
         if edgeChanged, wasExpanded {
             // Snap closed at the new location; the user is mid-settings so keep it pinned open there.
-            viewModel.isExpanded = false
+            withoutAnimation {
+                viewModel.showExpandedContent = false
+                viewModel.isExpanded = false
+                viewModel.showCollapsedContent = true
+            }
             panel.setFrame(geometry.windowFrame(for: viewModel.collapsedSize), display: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                 self?.viewModel.isPinned = true

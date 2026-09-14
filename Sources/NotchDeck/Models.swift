@@ -49,6 +49,13 @@ struct AppSettings: Codable, Equatable {
     var edge: NotchEdge = .top
     /// 0...1 position along a side edge (0 = top of screen, 1 = bottom). Ignored for `.top`.
     var edgeOffset: Double = 0.5
+    /// Seconds for the panel to open / close.
+    var openDuration: Double = AppSettings.defaultOpenDuration
+    var closeDuration: Double = AppSettings.defaultCloseDuration
+
+    static let defaultOpenDuration = 0.32
+    static let defaultCloseDuration = 0.30
+    static let durationRange = 0.1...1.0
 
     // Tolerate missing keys when the schema grows.
     init() {}
@@ -60,6 +67,8 @@ struct AppSettings: Codable, Equatable {
         openOnHover = try c.decodeIfPresent(Bool.self, forKey: .openOnHover) ?? true
         edge = try c.decodeIfPresent(NotchEdge.self, forKey: .edge) ?? .top
         edgeOffset = try c.decodeIfPresent(Double.self, forKey: .edgeOffset) ?? 0.5
+        openDuration = try c.decodeIfPresent(Double.self, forKey: .openDuration) ?? AppSettings.defaultOpenDuration
+        closeDuration = try c.decodeIfPresent(Double.self, forKey: .closeDuration) ?? AppSettings.defaultCloseDuration
     }
 }
 

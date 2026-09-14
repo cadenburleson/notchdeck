@@ -21,27 +21,39 @@ struct NotchRootView: View {
                           bottomRadius: vm.isExpanded ? NotchViewModel.bottomRadius : 12,
                           strength: shadowStrength)
 
+            // Content is laid out at its final size; the controller fades it out
+            // before the shape shrinks and fades it in after the shape has grown,
+            // so nothing is drawn outside the black mid-animation.
             Group {
                 if vm.isExpanded {
                     ExpandedContent()
-                        .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: vm.alignment.unitPoint)))
+                        .frame(width: vm.expandedSize.width, height: vm.expandedSize.height)
+                        .opacity(vm.showExpandedContent ? 1 : 0)
+                        .transition(.identity)
                 } else {
                     CollapsedContent()
-                        .transition(.opacity)
+                        .frame(width: vm.collapsedSize.width, height: vm.collapsedSize.height)
+                        .opacity(vm.showCollapsedContent ? 1 : 0)
+                        .transition(.identity)
                 }
             }
-            .frame(width: vm.currentSize.width, height: vm.currentSize.height)
-            .clipShape(shape)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: vm.alignment)
+            // Mask with the very same animated drawing as the black fill, so the
+            // content can never show outside the shape, even mid-animation.
+            .mask(ShadowedNotch(size: vm.currentSize, edge: vm.edge,
+                                bottomRadius: vm.isExpanded ? NotchViewModel.bottomRadius : 12,
+                                strength: 0))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: vm.alignment)
         .preferredColorScheme(.dark)
     }
 }
 
-/// Draws the notch silhouette with a soft drop shadow. The path is laid out in
-/// a view that spans the whole window (not just the shape), so the shadow's
-/// render bounds are the window bounds and nothing gets clipped at the edge
-/// of the shape. Animates with the shape's size like the `.frame` on the fill.
+/// Draws the notch silhouette with a soft drop shadow, rasterized with Core
+/// Graphics in a Canvas that spans the whole window. SwiftUI's `.shadow`
+/// truncates the blur about one radius out, which shows as a faint hard
+/// rectangle on flat backgrounds and pops when the renderer switches between
+/// its animating and static paths; a CG shadow fades all the way out.
 struct ShadowedNotch: View, Animatable {
     var size: CGSize
     var edge: NotchEdge
@@ -54,13 +66,32 @@ struct ShadowedNotch: View, Animatable {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            let rect = shapeRect(in: geo.size)
-            let shape = NotchShape(edge: edge, earRadius: NotchViewModel.earRadius, bottomRadius: bottomRadius)
-            Path(shape.path(in: rect).cgPath)
-                .fill(Theme.background)
-                .shadow(color: .black.opacity(strength * 0.5), radius: 2, y: 1)
-                .shadow(color: .black.opacity(strength * 0.55), radius: 22, y: 6)
+        Canvas(rendersAsynchronously: false) { context, canvasSize in
+            let rect = shapeRect(in: canvasSize)
+            let path = NotchShape(edge: edge, earRadius: NotchViewModel.earRadius, bottomRadius: bottomRadius)
+                .path(in: rect).cgPath
+            context.withCGContext { cg in
+                if strength > 0 {
+                    // Soft ambient shadow, offset slightly downwards (the Canvas context is flipped).
+                    cg.saveGState()
+                    cg.setShadow(offset: CGSize(width: 0, height: 6), blur: 30,
+                                 color: CGColor(gray: 0, alpha: 0.6 * strength))
+                    cg.addPath(path)
+                    cg.setFillColor(CGColor(gray: 0, alpha: 1))
+                    cg.fillPath()
+                    cg.restoreGState()
+                    // Tight contact shadow.
+                    cg.saveGState()
+                    cg.setShadow(offset: CGSize(width: 0, height: 1), blur: 3,
+                                 color: CGColor(gray: 0, alpha: 0.5 * strength))
+                    cg.addPath(path)
+                    cg.fillPath()
+                    cg.restoreGState()
+                }
+                cg.addPath(path)
+                cg.setFillColor(CGColor(gray: 0, alpha: 1))
+                cg.fillPath()
+            }
         }
         .allowsHitTesting(false)
     }

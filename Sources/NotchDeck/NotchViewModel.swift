@@ -3,6 +3,10 @@ import SwiftUI
 /// UI state for the notch panel, shared between AppKit (window sizing) and SwiftUI (drawing).
 final class NotchViewModel: ObservableObject {
     @Published var isExpanded = false
+    /// Content visibility is sequenced separately from the shape animation so
+    /// nothing is ever drawn outside the black while the shape is moving.
+    @Published var showExpandedContent = false
+    @Published var showCollapsedContent = true
     @Published var isPinned = false
     @Published var selectedTab: NotchTab = .notes
     @Published var showingSettings = false
