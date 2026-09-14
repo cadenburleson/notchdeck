@@ -80,10 +80,8 @@ Not every Mac has a notch, and not everyone wants the deck at the top. In
 unzip, and drag `NotchDeck.app` into `/Applications`. The build is universal
 (Apple silicon and Intel) and needs macOS 14 or later.
 
-The build is ad-hoc signed and not notarized, so the first launch needs one of:
-
-- right-click the app, choose **Open**, then **Open** again, or
-- `xattr -dr com.apple.quarantine /Applications/NotchDeck.app`
+Releases are signed with a Developer ID certificate and notarized by Apple, so
+it opens like any other Mac app.
 
 NotchDeck has no Dock icon. Look for the notch icon in the menu bar.
 
@@ -107,8 +105,10 @@ real bundle, so prefer `make run`.
 
 Push a tag like `v0.3.0` and CI does the rest:
 
-1. Builds and signs the app (ad-hoc by default, Developer ID if the secrets
-   below exist), zips it and uploads it as a workflow artifact.
+1. Builds a universal app, signs it with the Developer ID certificate, submits
+   it to Apple for notarization, staples the ticket, zips it and uploads it as
+   a workflow artifact. Without the signing secrets it falls back to an ad-hoc
+   signature.
 2. Runs Sparkle's `generate_appcast` with the `SPARKLE_PRIVATE_KEY` secret to
    EdDSA-sign the zip and write `appcast.xml`.
 3. Publishes a GitHub release with `NotchDeck.zip` and `appcast.xml` attached.
@@ -119,8 +119,8 @@ which GitHub redirects to the newest release, so nothing else needs hosting.
 The matching public key is `SUPublicEDKey` in `Resources/Info.plist`; Sparkle
 refuses any update that is not signed by the private key.
 
-Optional Developer ID signing and notarization is enabled by adding these
-repository secrets:
+Developer ID signing and notarization use these repository secrets (the
+workflow skips them if they are absent, which is what forks get):
 
 | Secret | Value |
 | --- | --- |
@@ -155,8 +155,12 @@ does the same signing. To sign a release by hand instead of in CI, use
   accurate if timers are throttled; the cycle logic is covered by unit tests.
 - `AppStore` is a single `ObservableObject` persisted as JSON with debounced
   saves and tolerant decoding, so old state files keep loading as fields are added.
-- `UpdateService` wraps `SPUStandardUpdaterController`. Launching the binary
-  with `--check-updates` forces a check, which is handy for testing a feed.
+- `UpdateService` wraps `SPUStandardUpdaterController`. Because this is a
+  menu-bar app that never becomes active on its own, Sparkle would hold
+  background-found updates indefinitely; the service opts into Sparkle's gentle
+  reminders and resumes the found update as a user-facing check so the alert
+  shows. Launching the binary with `--check-updates` forces a check, which is
+  handy for testing a feed.
 - Open/close is sequenced by `NotchWindowController`: content fades out before
   the shape shrinks and fades in after it has grown, because SwiftUI's clip and
   mask modifiers snap to their final size rather than animating with the fill.
