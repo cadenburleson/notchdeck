@@ -50,7 +50,7 @@ final class NotchWindowController {
     // MARK: - Setup
 
     private func buildPanel() {
-        let panel = NotchPanel(contentRect: viewModel.geometry.frame(for: viewModel.collapsedSize),
+        let panel = NotchPanel(contentRect: viewModel.geometry.windowFrame(for: viewModel.collapsedSize),
                                styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
                                backing: .buffered, defer: false)
         panel.isOpaque = false
@@ -163,11 +163,14 @@ final class NotchWindowController {
         viewModel.isPinned = pinned
     }
 
+    /// Screen rect of the visible shape (the window is larger to fit the shadow).
+    private var shapeFrame: NSRect { viewModel.geometry.frame(for: viewModel.currentSize) }
+
     // MARK: - Hover handling
 
     private func mouseDidMove() {
         guard isVisible else { return }
-        let inside = panel.frame.contains(NSEvent.mouseLocation)
+        let inside = shapeFrame.contains(NSEvent.mouseLocation)
         guard inside != mouseInside else { return }
         mouseInside = inside
         inside ? mouseEntered() : mouseExited()
@@ -189,7 +192,7 @@ final class NotchWindowController {
     private func expand() {
         collapseWorkItem?.cancel()
         guard !viewModel.isExpanded else { return }
-        panel.setFrame(viewModel.geometry.frame(for: viewModel.expandedSize), display: true)
+        panel.setFrame(viewModel.geometry.windowFrame(for: viewModel.expandedSize), display: true)
         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             viewModel.isExpanded = true
         }
@@ -211,8 +214,8 @@ final class NotchWindowController {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self] in
             guard let self, !self.viewModel.isExpanded else { return }
-            self.panel.setFrame(self.viewModel.geometry.frame(for: self.viewModel.collapsedSize), display: true)
-            self.mouseInside = self.panel.frame.contains(NSEvent.mouseLocation)
+            self.panel.setFrame(self.viewModel.geometry.windowFrame(for: self.viewModel.collapsedSize), display: true)
+            self.mouseInside = self.shapeFrame.contains(NSEvent.mouseLocation)
         }
     }
 
@@ -226,7 +229,7 @@ final class NotchWindowController {
         if edgeChanged, wasExpanded {
             // Snap closed at the new location; the user is mid-settings so keep it pinned open there.
             viewModel.isExpanded = false
-            panel.setFrame(geometry.frame(for: viewModel.collapsedSize), display: true)
+            panel.setFrame(geometry.windowFrame(for: viewModel.collapsedSize), display: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                 self?.viewModel.isPinned = true
                 self?.expand()
@@ -235,8 +238,8 @@ final class NotchWindowController {
             return
         }
         updateWingWidth()
-        panel.setFrame(geometry.frame(for: viewModel.currentSize), display: true)
-        mouseInside = panel.frame.contains(NSEvent.mouseLocation)
+        panel.setFrame(geometry.windowFrame(for: viewModel.currentSize), display: true)
+        mouseInside = shapeFrame.contains(NSEvent.mouseLocation)
     }
 
     private func updateWingWidth() {
@@ -253,7 +256,7 @@ final class NotchWindowController {
             viewModel.collapsedWingWidth = width
         }
         if !viewModel.isExpanded {
-            panel.setFrame(viewModel.geometry.frame(for: viewModel.collapsedSize), display: true)
+            panel.setFrame(viewModel.geometry.windowFrame(for: viewModel.collapsedSize), display: true)
         }
     }
 }

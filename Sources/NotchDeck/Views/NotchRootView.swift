@@ -9,14 +9,20 @@ struct NotchRootView: View {
                    bottomRadius: vm.isExpanded ? NotchViewModel.bottomRadius : 12)
     }
 
+    private var shadowStrength: Double {
+        if vm.isExpanded { return 1 }
+        return vm.edge == .top ? 0 : 0.7
+    }
+
     var body: some View {
         ZStack(alignment: vm.alignment) {
             shape
                 .fill(Theme.background)
                 .frame(width: vm.currentSize.width, height: vm.currentSize.height)
-                .shadow(color: .black.opacity(vm.isExpanded ? 0.45 : 0), radius: 18,
-                        x: vm.edge == .left ? 6 : (vm.edge == .right ? -6 : 0),
-                        y: vm.edge == .top ? 8 : 0)
+                // A tight contact shadow plus a soft ambient one. The collapsed
+                // top pill stays flat so it blends into the hardware notch.
+                .shadow(color: .black.opacity(shadowStrength * 0.5), radius: 2, y: 1)
+                .shadow(color: .black.opacity(shadowStrength * 0.55), radius: 22, y: 6)
 
             Group {
                 if vm.isExpanded {

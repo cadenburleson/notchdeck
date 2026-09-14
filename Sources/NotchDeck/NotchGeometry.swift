@@ -54,7 +54,29 @@ struct NotchGeometry: Equatable {
         self.notchHeight = notchHeight
     }
 
-    /// Window frame for a panel of the given size hugging the configured edge.
+    /// Transparent margin around the shape so its shadow has room to render.
+    static let shadowMargin: CGFloat = 48
+
+    /// Window frame: the shape frame plus shadow margin on every side that is
+    /// not glued to the screen edge.
+    func windowFrame(for size: CGSize) -> NSRect {
+        let m = NotchGeometry.shadowMargin
+        var f = frame(for: size)
+        switch edge {
+        case .top:
+            f.origin.x -= m; f.size.width += 2 * m
+            f.origin.y -= m; f.size.height += m
+        case .left:
+            f.size.width += m
+            f.origin.y -= m; f.size.height += 2 * m
+        case .right:
+            f.origin.x -= m; f.size.width += m
+            f.origin.y -= m; f.size.height += 2 * m
+        }
+        return f
+    }
+
+    /// Frame of the visible notch shape for a panel of the given size, hugging the configured edge.
     func frame(for size: CGSize) -> NSRect {
         switch edge {
         case .top:
