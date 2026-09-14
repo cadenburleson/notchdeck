@@ -12,17 +12,14 @@ struct NotchRootView: View {
     /// The collapsed top pill stays flat so it blends into the hardware notch.
     private var shadowStrength: Double {
         if vm.isExpanded { return 1 }
-        return vm.edge == .top ? 0 : 0.75
+        return vm.edge == .top ? 0 : 0.7
     }
 
     var body: some View {
         ZStack(alignment: vm.alignment) {
-            SoftShadow(shape: shape, strength: shadowStrength)
-                .frame(width: vm.currentSize.width, height: vm.currentSize.height)
-
-            shape
-                .fill(Theme.background)
-                .frame(width: vm.currentSize.width, height: vm.currentSize.height)
+            ShadowedNotch(size: vm.currentSize, edge: vm.edge,
+                          bottomRadius: vm.isExpanded ? NotchViewModel.bottomRadius : 12,
+                          strength: shadowStrength)
 
             Group {
                 if vm.isExpanded {
@@ -41,31 +38,39 @@ struct NotchRootView: View {
     }
 }
 
-/// A soft drop shadow built from concentric strokes of the shape. It uses no
-/// blur or shadow filters because the compositor drops those for this
-/// transparent panel; stacked translucent strokes give a quadratic falloff
-/// that reads like a blurred shadow.
-struct SoftShadow: View {
-    let shape: NotchShape
+/// Draws the notch silhouette with a soft drop shadow. The path is laid out in
+/// a view that spans the whole window (not just the shape), so the shadow's
+/// render bounds are the window bounds and nothing gets clipped at the edge
+/// of the shape. Animates with the shape's size like the `.frame` on the fill.
+struct ShadowedNotch: View, Animatable {
+    var size: CGSize
+    var edge: NotchEdge
+    var bottomRadius: CGFloat
     var strength: Double
-    var spread: CGFloat = 26
-    var steps = 16
-    var edgeOpacity: Double = 0.5
+
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat> {
+        get { AnimatablePair(AnimatablePair(size.width, size.height), bottomRadius) }
+        set { size = CGSize(width: newValue.first.first, height: newValue.first.second); bottomRadius = newValue.second }
+    }
 
     var body: some View {
-        ZStack {
-            // Tight contact shadow right at the edge.
-            shape.stroke(Color.black.opacity(strength * 0.35), lineWidth: 4)
-            // Ambient falloff: stroke i reaches spread * t outside the edge; the
-            // inner half is hidden under the fill. Outer strokes are fainter.
-            ForEach(0..<steps, id: \.self) { i in
-                let t = Double(i + 1) / Double(steps)
-                shape.stroke(Color.black.opacity(strength * edgeOpacity * 2 / Double(steps) * (1 - t) * 1.6),
-                             lineWidth: spread * 2 * t)
-            }
+        GeometryReader { geo in
+            let rect = shapeRect(in: geo.size)
+            let shape = NotchShape(edge: edge, earRadius: NotchViewModel.earRadius, bottomRadius: bottomRadius)
+            Path(shape.path(in: rect).cgPath)
+                .fill(Theme.background)
+                .shadow(color: .black.opacity(strength * 0.5), radius: 2, y: 1)
+                .shadow(color: .black.opacity(strength * 0.55), radius: 22, y: 6)
         }
-        .offset(y: 2)
         .allowsHitTesting(false)
+    }
+
+    private func shapeRect(in window: CGSize) -> CGRect {
+        switch edge {
+        case .top: return CGRect(x: (window.width - size.width) / 2, y: 0, width: size.width, height: size.height)
+        case .left: return CGRect(x: 0, y: (window.height - size.height) / 2, width: size.width, height: size.height)
+        case .right: return CGRect(x: window.width - size.width, y: (window.height - size.height) / 2, width: size.width, height: size.height)
+        }
     }
 }
 
