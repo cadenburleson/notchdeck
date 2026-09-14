@@ -54,8 +54,9 @@ struct NotchGeometry: Equatable {
         self.notchHeight = notchHeight
     }
 
-    /// Transparent margin around the shape so its shadow has room to render.
-    static let shadowMargin: CGFloat = 48
+    /// Transparent margin around the shape so the drawn shadow has room.
+    /// The window ignores mouse events while the cursor is in this margin.
+    static let shadowMargin: CGFloat = 36
 
     /// Window frame: the shape frame plus shadow margin on every side that is
     /// not glued to the screen edge.

@@ -9,20 +9,20 @@ struct NotchRootView: View {
                    bottomRadius: vm.isExpanded ? NotchViewModel.bottomRadius : 12)
     }
 
+    /// The collapsed top pill stays flat so it blends into the hardware notch.
     private var shadowStrength: Double {
         if vm.isExpanded { return 1 }
-        return vm.edge == .top ? 0 : 0.7
+        return vm.edge == .top ? 0 : 0.75
     }
 
     var body: some View {
         ZStack(alignment: vm.alignment) {
+            SoftShadow(shape: shape, strength: shadowStrength)
+                .frame(width: vm.currentSize.width, height: vm.currentSize.height)
+
             shape
                 .fill(Theme.background)
                 .frame(width: vm.currentSize.width, height: vm.currentSize.height)
-                // A tight contact shadow plus a soft ambient one. The collapsed
-                // top pill stays flat so it blends into the hardware notch.
-                .shadow(color: .black.opacity(shadowStrength * 0.5), radius: 2, y: 1)
-                .shadow(color: .black.opacity(shadowStrength * 0.55), radius: 22, y: 6)
 
             Group {
                 if vm.isExpanded {
@@ -38,6 +38,34 @@ struct NotchRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: vm.alignment)
         .preferredColorScheme(.dark)
+    }
+}
+
+/// A soft drop shadow built from concentric strokes of the shape. It uses no
+/// blur or shadow filters because the compositor drops those for this
+/// transparent panel; stacked translucent strokes give a quadratic falloff
+/// that reads like a blurred shadow.
+struct SoftShadow: View {
+    let shape: NotchShape
+    var strength: Double
+    var spread: CGFloat = 26
+    var steps = 16
+    var edgeOpacity: Double = 0.5
+
+    var body: some View {
+        ZStack {
+            // Tight contact shadow right at the edge.
+            shape.stroke(Color.black.opacity(strength * 0.35), lineWidth: 4)
+            // Ambient falloff: stroke i reaches spread * t outside the edge; the
+            // inner half is hidden under the fill. Outer strokes are fainter.
+            ForEach(0..<steps, id: \.self) { i in
+                let t = Double(i + 1) / Double(steps)
+                shape.stroke(Color.black.opacity(strength * edgeOpacity * 2 / Double(steps) * (1 - t) * 1.6),
+                             lineWidth: spread * 2 * t)
+            }
+        }
+        .offset(y: 2)
+        .allowsHitTesting(false)
     }
 }
 

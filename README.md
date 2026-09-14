@@ -143,7 +143,12 @@ does the same signing. To sign a release by hand instead of in CI, use
   `auxiliaryTopRightArea` to size the sliver exactly like the physical notch,
   and computes frames for the top, left and right placements.
 - `NotchShape` draws the notch silhouette (concave ears, rounded free corners)
-  and rotates it for side placements.
+  and rotates it for side placements. Its drop shadow (`SoftShadow`) is a stack
+  of translucent strokes rather than SwiftUI's `.shadow`, because the
+  compositor drops blur/shadow filters for this transparent panel and the
+  window-server shadow is too faint for a non-key panel. The window carries a
+  transparent margin for it and toggles `ignoresMouseEvents` so clicks in the
+  margin fall through to whatever is underneath.
 - `PomodoroEngine` derives the remaining time from an end date so it stays
   accurate if timers are throttled; the cycle logic is covered by unit tests.
 - `AppStore` is a single `ObservableObject` persisted as JSON with debounced

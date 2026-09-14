@@ -55,16 +55,20 @@ final class NotchWindowController {
                                backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
         panel.isMovable = false
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
-        panel.isFloatingPanel = true
-        // Must come after `isFloatingPanel`, which resets the level to `.floating`.
         // We sit above the menu bar so the notch strip is ours.
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         panel.animationBehavior = .none
+        // The shadow is drawn by SoftShadow (plain geometry). Neither the
+        // window-server shadow (too faint for a non-key panel) nor SwiftUI's
+        // `.shadow` filter (dropped by the compositor for this transparent
+        // panel) render acceptably here.
+        panel.hasShadow = false
+        // Start click-through; the mouse monitor enables events when the cursor is over the shape.
+        panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
         let root = NotchRootView()
@@ -173,6 +177,9 @@ final class NotchWindowController {
         let inside = shapeFrame.contains(NSEvent.mouseLocation)
         guard inside != mouseInside else { return }
         mouseInside = inside
+        // Only the visible shape should catch clicks; the shadow margin lets
+        // them fall through to whatever is underneath.
+        panel.ignoresMouseEvents = !inside
         inside ? mouseEntered() : mouseExited()
     }
 
@@ -216,6 +223,7 @@ final class NotchWindowController {
             guard let self, !self.viewModel.isExpanded else { return }
             self.panel.setFrame(self.viewModel.geometry.windowFrame(for: self.viewModel.collapsedSize), display: true)
             self.mouseInside = self.shapeFrame.contains(NSEvent.mouseLocation)
+            self.panel.ignoresMouseEvents = !self.mouseInside
         }
     }
 
@@ -240,6 +248,7 @@ final class NotchWindowController {
         updateWingWidth()
         panel.setFrame(geometry.windowFrame(for: viewModel.currentSize), display: true)
         mouseInside = shapeFrame.contains(NSEvent.mouseLocation)
+        panel.ignoresMouseEvents = !mouseInside
     }
 
     private func updateWingWidth() {
