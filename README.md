@@ -42,7 +42,12 @@ widgets:
 
 - **Notes**: a scratchpad that is always one hover away. Word count, copy, clear.
 - **Tasks**: a quick to-do list. Type, press return, check things off, clear done.
-  Drag a task to reorder it.
+  Drag a task to reorder it, double-click it to rename it. Organise tasks into
+  colored folders that all show in the same list: create one with the folder
+  button next to the add field, drag its header to reorder folders, collapse
+  it with its chevron, drag tasks into or out of it, and use the "+" on its
+  header to add straight into it. Right-click (or double-click) a folder
+  header to rename, recolor or delete it; deleting keeps its tasks.
   The number of open tasks shows next to the camera while the deck is closed.
 - **Pomodoro**: focus / short break / long break cycle with a progress ring,
   session dots, pause, reset and skip. The countdown shows beside the camera

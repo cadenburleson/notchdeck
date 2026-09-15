@@ -5,6 +5,41 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var title: String
     var isDone: Bool = false
     var createdAt: Date = Date()
+    /// The folder the task is in; nil means unfiled. Absent in older state files.
+    var folderID: UUID? = nil
+}
+
+/// The fixed palette a folder can use.
+enum FolderColor: String, Codable, CaseIterable, Identifiable {
+    case red, orange, yellow, green, teal, blue, purple, pink, gray
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+/// A named, colored group of tasks, shown as a collapsible section.
+struct TaskFolder: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String
+    var color: FolderColor
+    var isCollapsed: Bool = false
+
+    init(id: UUID = UUID(), name: String, color: FolderColor, isCollapsed: Bool = false) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.isCollapsed = isCollapsed
+    }
+
+    // A color this build doesn't know (from a newer version) falls back to gray
+    // instead of failing to load the whole state file.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Untitled"
+        color = FolderColor(rawValue: try c.decodeIfPresent(String.self, forKey: .color) ?? "") ?? .gray
+        isCollapsed = try c.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
+    }
 }
 
 struct PomodoroSettings: Codable, Equatable {
@@ -75,6 +110,7 @@ struct AppSettings: Codable, Equatable {
 struct PersistedState: Codable {
     var notes: String = ""
     var tasks: [TodoItem] = []
+    var folders: [TaskFolder] = []
     var settings = AppSettings()
     var totalFocusSessions: Int = 0
 
@@ -83,6 +119,7 @@ struct PersistedState: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         tasks = try c.decodeIfPresent([TodoItem].self, forKey: .tasks) ?? []
+        folders = try c.decodeIfPresent([TaskFolder].self, forKey: .folders) ?? []
         settings = try c.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
         totalFocusSessions = try c.decodeIfPresent(Int.self, forKey: .totalFocusSessions) ?? 0
     }

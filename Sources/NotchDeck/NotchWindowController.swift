@@ -16,6 +16,14 @@ private struct Placement: Equatable {
     let offset: Double
 }
 
+extension NotchPanel {
+    /// The panel only becomes key when a text field is clicked. Call this before
+    /// focusing a field programmatically so keystrokes land in the panel.
+    static func makeKeyForTyping() {
+        NSApp.windows.first { $0 is NotchPanel }?.makeKey()
+    }
+}
+
 /// Delivers the first click straight to SwiftUI instead of swallowing it to focus the window.
 final class NotchHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -213,9 +221,31 @@ final class NotchWindowController {
 
     private func mouseExited() {
         guard !viewModel.isPinned else { return }
-        let work = DispatchWorkItem { [weak self] in self?.collapse() }
+        scheduleCollapse(after: 0.25)
+    }
+
+    /// Collapses shortly after the pointer leaves, but not while a menu is open:
+    /// a context menu's window sits outside the shape, so using it "leaves" the
+    /// panel. Menus run an event-tracking run loop, which is checked directly
+    /// rather than inferred from menu notifications.
+    private func scheduleCollapse(after delay: TimeInterval) {
+        collapseWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.viewModel.isPinned else { return }
+            if RunLoop.current.currentMode == .eventTracking {
+                self.scheduleCollapse(after: 0.25)
+                return
+            }
+            if self.shapeFrame.contains(NSEvent.mouseLocation) {
+                // Back over the panel, e.g. after closing a menu: stay open.
+                self.mouseInside = true
+                self.panel.ignoresMouseEvents = false
+                return
+            }
+            self.collapse()
+        }
         collapseWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func expand() {

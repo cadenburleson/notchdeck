@@ -25,6 +25,22 @@ enum Theme {
     }
 }
 
+extension FolderColor {
+    var color: Color {
+        switch self {
+        case .red: return Color(red: 1.0, green: 0.42, blue: 0.40)
+        case .orange: return Color(red: 1.0, green: 0.62, blue: 0.28)
+        case .yellow: return Color(red: 1.0, green: 0.84, blue: 0.30)
+        case .green: return Color(red: 0.38, green: 0.84, blue: 0.50)
+        case .teal: return Color(red: 0.30, green: 0.80, blue: 0.80)
+        case .blue: return Color(red: 0.40, green: 0.66, blue: 1.0)
+        case .purple: return Color(red: 0.70, green: 0.55, blue: 1.0)
+        case .pink: return Color(red: 1.0, green: 0.50, blue: 0.75)
+        case .gray: return Color(white: 0.62)
+        }
+    }
+}
+
 /// A small, flat icon button used across the panel.
 struct IconButton: View {
     let symbol: String
@@ -44,6 +60,8 @@ struct IconButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Clicking an icon must not pull keyboard focus out of a text field.
+        .focusable(false)
         .onHover { hovering = $0 }
         .help(help)
     }
